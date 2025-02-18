@@ -20,20 +20,18 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
-
-// Google Auth Provider
 const provider = new GoogleAuthProvider();
 
-// Function to sign in with Google (Restrict to College Email)
+// Function to Sign in with Google (Only College Email Allowed)
 const signInWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, provider);
     const email = result.user.email;
 
-    // Restrict access to only college emails
-    if (!email.endsWith("@cmrcet") && !email.includes("@yourcollege.edu")) {
-      await logOut(); // Log the user out immediately
-      alert("Only college emails are allowed.");
+    // Restrict to only @cmrcet.ac.in emails
+    if (!email.endsWith("@cmrcet.ac.in")) {
+      await signOut(auth); // Immediately log the user out
+      alert("Only CMRCET college emails are allowed!");
       return null;
     }
 
@@ -44,7 +42,7 @@ const signInWithGoogle = async () => {
   }
 };
 
-// Function to sign out
+// Function to Sign Out
 const logOut = async () => {
   try {
     await signOut(auth);
@@ -54,5 +52,5 @@ const logOut = async () => {
   }
 };
 
-// Export everything
+// Export modules
 export { app, auth, db, storage, signInWithGoogle, logOut };
