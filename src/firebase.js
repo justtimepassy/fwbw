@@ -1,10 +1,9 @@
-// Import necessary Firebase functions
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Your Firebase configuration
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBVeg--ErX4tMgWvzuWpCEAyTiYTclT_Gs",
   authDomain: "fwbw-8ad0f.firebaseapp.com",
@@ -18,11 +17,42 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-
-// Initialize Firebase services
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Export services for use in the project
-export { app, auth, db, storage };
+// Google Auth Provider
+const provider = new GoogleAuthProvider();
+
+// Function to sign in with Google (Restrict to College Email)
+const signInWithGoogle = async () => {
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const email = result.user.email;
+
+    // Restrict access to only college emails
+    if (!email.endsWith("@cmrcet") && !email.includes("@yourcollege.edu")) {
+      await logOut(); // Log the user out immediately
+      alert("Only college emails are allowed.");
+      return null;
+    }
+
+    console.log("User Info:", result.user);
+    return result.user;
+  } catch (error) {
+    console.error("Google Sign-In Error:", error);
+  }
+};
+
+// Function to sign out
+const logOut = async () => {
+  try {
+    await signOut(auth);
+    console.log("User logged out");
+  } catch (error) {
+    console.error("Logout Error:", error);
+  }
+};
+
+// Export everything
+export { app, auth, db, storage, signInWithGoogle, logOut };
