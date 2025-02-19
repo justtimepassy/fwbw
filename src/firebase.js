@@ -1,3 +1,4 @@
+// firebase.js
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -52,5 +53,5 @@ const logOut = async () => {
   }
 };
 
-// Export modules
-export { app, auth, db, storage, signInWithGoogle, logOut };
+// Export modules with Firestore as "firestore"
+export { app, auth, db as firestore, storage, signInWithGoogle, logOut };
