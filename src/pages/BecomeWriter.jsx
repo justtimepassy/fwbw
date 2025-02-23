@@ -12,7 +12,7 @@ const BecomeWriter = () => {
   });
   const [availableAssignments, setAvailableAssignments] = useState([]);
   const [error, setError] = useState("");
-  const [isWriter, setIsWriter] = useState(false);
+  const [writerId, setWriterId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [hasAssignments, setHasAssignments] = useState(false);
   const navigate = useNavigate();
@@ -28,7 +28,12 @@ const BecomeWriter = () => {
       const writersRef = collection(firestore, "writers");
       const q = query(writersRef, where("userId", "==", currentUser.uid));
       const querySnapshot = await getDocs(q);
-      setIsWriter(!querySnapshot.empty);
+      if (!querySnapshot.empty) {
+        const writerDoc = querySnapshot.docs[0];
+        setWriterId(writerDoc.id);
+      } else {
+        setWriterId("");
+      }
       setIsLoading(false);
     } catch (err) {
       console.error("Error checking writer status:", err);
@@ -39,7 +44,11 @@ const BecomeWriter = () => {
   const fetchAvailableAssignments = async () => {
     try {
       const assignmentsRef = collection(firestore, "assignments");
-      const q = query(assignmentsRef, where("isAssigned", "==", false));
+      const q = query(
+        assignmentsRef,
+        where("isAssigned", "==", false),
+        where("writerId", "==", "") // Only fetch assignments with empty writerId
+      );
       const querySnapshot = await getDocs(q);
       const assignments = querySnapshot.docs
         .map(doc => ({
@@ -88,7 +97,7 @@ const BecomeWriter = () => {
         createdAt: new Date()
       });
 
-      setIsWriter(true);
+      setWriterId(writerRef.id);
       setIsLoading(false);
     } catch (err) {
       console.error(err);
@@ -121,7 +130,7 @@ const BecomeWriter = () => {
     );
   }
 
-  if (isWriter) {
+  if (writerId) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md">

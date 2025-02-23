@@ -57,7 +57,7 @@ const Writers = () => {
         pages: Number(requestDetails.pages),
         deadline: requestDetails.deadline,
         description: requestDetails.description,
-        isAssigned: false, // Set to false initially
+        isAssigned: true, // Set to false initially
         isFinished: false, // Set to false initially
         status: "pending", // Optional: Add a status field
         createdAt: new Date(),
