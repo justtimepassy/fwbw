@@ -12,6 +12,7 @@ const Home = () => {
 
   useEffect(() => {
     if (currentUser) {
+      console.log("Current User ID:", currentUser.uid); // Debugging
       fetchActiveAssignments();
     }
   }, [currentUser]);
@@ -19,12 +20,16 @@ const Home = () => {
   const fetchActiveAssignments = async () => {
     try {
       const assignmentsRef = collection(firestore, "assignments");
+
+      // Fetch assignments requested by the current user
       const userAssignmentsQuery = query(
         assignmentsRef,
         where("userId", "==", currentUser.uid),
         where("isAssigned", "==", true),
         where("isFinished", "==", false)
       );
+
+      // Fetch assignments accepted by the current user
       const writerAssignmentsQuery = query(
         assignmentsRef,
         where("writerId", "==", currentUser.uid),
@@ -37,20 +42,22 @@ const Home = () => {
         getDocs(writerAssignmentsQuery)
       ]);
 
-      const assignments = [
-        ...userSnapshots.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          type: 'requested'
-        })),
-        ...writerSnapshots.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          type: 'assigned'
-        }))
-      ];
+      const userAssignments = userSnapshots.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        type: 'requested'
+      }));
 
-      setActiveAssignments(assignments);
+      const writerAssignments = writerSnapshots.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        type: 'accepted'
+      }));
+
+      console.log("Requested Assignments:", userAssignments); // Debugging
+      console.log("Accepted Assignments:", writerAssignments); // Debugging
+
+      setActiveAssignments([...userAssignments, ...writerAssignments]);
     } catch (err) {
       console.error("Error fetching assignments:", err);
     }
@@ -147,18 +154,15 @@ const Home = () => {
                   key={assignment.id}
                   className="bg-gray-800 p-6 rounded-xl border border-gray-700 relative overflow-hidden"
                 >
-                  {/* Glowing effect for new assignments */}
-                  <div className="absolute -inset-1 bg-gradient-to-r from-cyan-400 to-blue-500 opacity-20 blur"></div>
-                  
                   <div className="relative">
                     <div className="flex justify-between items-start mb-4">
                       <span className={`px-3 py-1 rounded-full text-sm ${
                         assignment.type === 'requested' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-blue-500/20 text-blue-400'
                       }`}>
-                        {assignment.type === 'requested' ? 'Requested' : 'Assigned'}
+                        {assignment.type === 'requested' ? 'Requested' : 'Accepted'}
                       </span>
                       <span className="text-gray-400">
-                        Due: {new Date(assignment.deadline).toLocaleDateString()}
+                        Due: {new Date(`${assignment.deadline}T00:00:00`).toLocaleDateString()}
                       </span>
                     </div>
 
