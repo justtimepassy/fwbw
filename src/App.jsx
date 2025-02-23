@@ -9,7 +9,7 @@ import Post from "./pages/Post";
 import Profile from "./pages/Profile";
 import Writers from "./pages/Writers";
 import UserProfile from "./pages/UserProfile"; // New page for user profiles
-
+import HomeButtons from "./pages/HomeButtons";
 
 function App() {
   return (
