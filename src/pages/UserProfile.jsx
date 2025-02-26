@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { firestore } from "../firebase";
-import { doc, getDocs, collection, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { useParams } from "react-router-dom";
 
 const UserProfile = () => {
@@ -34,9 +34,10 @@ const UserProfile = () => {
       <h2 className="text-2xl font-bold">User Profile</h2>
 
       <img
-        src={userData.profilePic || "https://via.placeholder.com/150"}
+        src={userData.profilePic || userData.photoURL || "https://via.placeholder.com/150"}
         alt="Profile"
         className="w-24 h-24 rounded-full border-4 border-gray-300 mt-4"
+        onError={(e) => (e.target.src = "https://via.placeholder.com/150")} // Fallback image
       />
 
       <h3 className="text-xl mt-2">{userData.username}</h3>

@@ -1,79 +1,77 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { auth, signInWithGoogle, logOut } from '../firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { Menu } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { auth, logOut } from "../firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { firestore } from "../firebase";
 
 const Navbar = () => {
-  const [user, setUser] = useState(null);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [user, setUser] = useState(null);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-    return () => unsubscribe();
-  }, []);
+    useEffect(() => {
+        const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+        });
 
-  return (
-    <nav className="bg-white shadow-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 items-center">
-          {/* Logo */}
-          <Link to="/" className="flex items-center">
-            <span className="text-2xl font-bold text-blue-600">WriteHub</span>
-          </Link>
+        return () => unsubscribeAuth();
+    }, []);
 
-          {/* Navigation Items */}
-          <div className="flex items-center space-x-4">
-            {!user ? (
-              <button
-                onClick={signInWithGoogle}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm md:text-base font-medium"
-              >
-                Sign In
-              </button>
-            ) : (
-              <div className="relative">
-                <button
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="flex items-center space-x-2 bg-white text-blue-600 px-4 py-2 rounded-md hover:bg-blue-50 transition-colors duration-200 font-medium"
-                >
-                  <span className="hidden md:block">
-                    {user.displayName || 'Account'}
-                  </span>
-                  <span className="md:hidden">
-                    {user.displayName?.split(' ')[0] || 'Account'}
-                  </span>
-                  <span className="text-xs">▼</span>
-                </button>
+    useEffect(() => {
+        if (!user) return;
 
-                {isDropdownOpen && (
-                  <div 
-                    className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10"
-                    onClick={() => setIsDropdownOpen(false)}
-                  >
-                    <Link
-                      to="/profile"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      My Profile
-                    </Link>
-                    <button
-                      onClick={logOut}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      Logout
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </nav>
-  );
+        const q = query(collection(firestore, "notifications"), where("userId", "==", user.uid), where("read", "==", false));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setUnreadCount(snapshot.docs.length);
+        });
+
+        return () => unsubscribe();
+    }, [user]);
+
+    return (
+        <nav className="bg-white shadow-md">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex justify-between h-16 items-center">
+                    <Link to="/" className="text-2xl font-bold text-blue-600">WriteHub</Link>
+
+                    <div className="hidden md:flex space-x-6">
+                        <Link to="/" className="text-gray-700 hover:text-blue-600 transition">Home</Link>
+                        <Link to="/post" className="text-gray-700 hover:text-blue-600 transition">Post Work</Link>
+                        <Link to="/available-work" className="text-gray-700 hover:text-blue-600 transition">Available Work</Link>
+                        <Link to="/notifications" className="text-gray-700 hover:text-blue-600 transition">
+                            Notifications {unreadCount > 0 && <span className="bg-red-500 text-white px-2 rounded-full">{unreadCount}</span>}
+                        </Link>
+                    </div>
+
+                    {/* User Profile & Logout */}
+                    <div className="relative">
+                        {user ? (
+                            <button
+                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                className="flex items-center space-x-2 bg-white text-blue-600 px-4 py-2 rounded-md hover:bg-blue-50 transition duration-200 font-medium"
+                            >
+                                <span>{user.displayName || "Profile"}</span>
+                                <span className="text-xs">▼</span>
+                            </button>
+                        ) : (
+                            <Link to="/login" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition duration-200">
+                                Sign In
+                            </Link>
+                        )}
+
+                        {isDropdownOpen && user && (
+                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 border">
+                                <Link to="/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</Link>
+                                <button onClick={logOut} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </nav>
+    );
 };
 
 export default Navbar;
