@@ -17,6 +17,7 @@ const Post = () => {
   const [description, setDescription] = useState("");
   const [pages, setPages] = useState("");
   const [ratePerPage, setRatePerPage] = useState("");
+  const [deadline, setDeadline] = useState(""); // ✅ New state for deadline
   const [error, setError] = useState("");
   const currentUser = auth.currentUser;
 
@@ -60,7 +61,7 @@ const Post = () => {
       return;
     }
 
-    if (!title.trim() || !description.trim() || !pages || !ratePerPage) {
+    if (!title.trim() || !description.trim() || !pages || !ratePerPage || !deadline) {
       setError("⚠️ All fields are required.");
       return;
     }
@@ -71,6 +72,12 @@ const Post = () => {
     }
 
     const totalPrice = Number(pages) * Number(ratePerPage);
+    const deadlineDate = new Date(deadline);
+
+    if (deadlineDate <= new Date()) {
+      setError("⚠️ Deadline must be a future date.");
+      return;
+    }
 
     try {
       await addDoc(collection(firestore, "assignments"), {
@@ -83,18 +90,20 @@ const Post = () => {
         isFinished: false,
         isAssigned: false,
         status: "pending",
+        deadline: deadlineDate, // ✅ Store deadline in Firestore
         createdAt: new Date(),
       });
 
       setAssignments((prev) => [
         ...prev,
-        { title, description, pages, ratePerPage, totalPrice, isFinished: false },
+        { title, description, pages, ratePerPage, totalPrice, deadline: deadlineDate, isFinished: false },
       ]);
 
       setTitle("");
       setDescription("");
       setPages("");
       setRatePerPage("");
+      setDeadline("");
       console.log("✅ Work posted successfully!");
     } catch (error) {
       console.error("🔥 Firestore Write Error:", error.message);
@@ -167,6 +176,17 @@ const Post = () => {
             />
           </label>
 
+          <label className="block mb-2">
+            <span className="text-gray-700">Deadline:</span>
+            <input
+              type="datetime-local" // ✅ Allows date & time selection
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="w-full border p-2 rounded-md"
+              required
+            />
+          </label>
+
           <p className="text-gray-800 font-semibold mt-2">
             Total Cost: ₹{pages && ratePerPage ? pages * ratePerPage : 0}
           </p>
@@ -202,6 +222,19 @@ const Post = () => {
                 <p className="text-sm text-gray-500 font-bold">
                   Total Cost: ₹{assignment.totalPrice}
                 </p>
+                <p className="text-sm text-red-500">
+    Deadline: {assignment.deadline && assignment.deadline.seconds 
+        ? new Date(assignment.deadline.seconds * 1000).toLocaleString("en-US", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+        })
+        : "No deadline set"}
+</p>
+
               </div>
               <button
                 onClick={() => handleDeletePost(assignment.id)}

@@ -12,6 +12,7 @@ import UserProfile from "./pages/UserProfile";
 import AvailableWork from "./pages/AvailableWork"; // Writers see & claim assignments
 import Notifications from "./pages/Notifications"; // Notifications Page
 import Chat from "./pages/Chat"; // 🔥 New Chat Page
+import ChatList from "./pages/ChatList";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -46,7 +47,9 @@ function App() {
         <Route path="/user/:username" element={<UserProfile />} />
         <Route path="/available-work" element={user ? <AvailableWork /> : <Navigate to="/login" />} />
         <Route path="/notifications" element={user ? <Notifications /> : <Navigate to="/login" />} />
+        <Route path="/chat" element={user ? <ChatList /> : <Navigate to="/login" />} />
         <Route path="/chat/:chatId" element={user ? <Chat /> : <Navigate to="/login" />} />
+        
 
       </Routes>
     </Router>

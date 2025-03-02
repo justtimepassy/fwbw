@@ -19,10 +19,12 @@ const Home = () => {
     const [loading, setLoading] = useState(true);
     const [selectedWriter, setSelectedWriter] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [userRequest, setUserRequest] = useState(null);
+    const [taskName, setTaskName] = useState("");
     const [description, setDescription] = useState("");
     const [pages, setPages] = useState(1);
     const [ratePerPage, setRatePerPage] = useState(0);
+    const [deadline, setDeadline] = useState("");
+    const [userRequests, setUserRequests] = useState([]);
     const navigate = useNavigate();
     const currentUser = auth.currentUser;
 
@@ -39,66 +41,98 @@ const Home = () => {
 
             const writersData = await Promise.all(snapshot.docs.map(async (doc) => {
                 const writer = { id: doc.id, ...doc.data() };
-                const requestsSnapshot = await getDocs(query(
+
+                // ✅ Count pending requests
+                const pendingRequestsQuery = query(
                     collection(firestore, "requests"),
                     where("writerId", "==", writer.id),
                     where("status", "==", "pending")
-                ));
+                );
+                const pendingRequestsSnapshot = await getDocs(pendingRequestsQuery);
 
                 return {
                     ...writer,
-                    pendingRequests: requestsSnapshot.size
+                    pendingRequests: pendingRequestsSnapshot.size
                 };
             }));
 
             setWriters(writersData);
+            setLoading(false);
         };
 
-        const checkExistingRequest = async () => {
+        const fetchUserRequests = async () => {
             const q = query(
                 collection(firestore, "requests"),
                 where("userId", "==", currentUser.uid),
-                where("status", "in", ["pending", "accepted"])
+                where("status", "==", "pending")
             );
             const snapshot = await getDocs(q);
-            if (!snapshot.empty) {
-                setUserRequest(snapshot.docs[0].data());
-            }
+            setUserRequests(snapshot.docs.map(doc => doc.data().writerId)); // 🔥 Store writer IDs
         };
 
         fetchWriters();
-        checkExistingRequest();
-        setLoading(false);
+        fetchUserRequests();
     }, [currentUser]);
 
     const requestWriter = (writer) => {
-        if (userRequest) {
-            alert("You already have an active request. Please wait for it to be completed or rejected.");
+        if (userRequests.includes(writer.id)) {
+            alert("You have already sent a request to this writer.");
             return;
         }
+        if (userRequests.length >= 5) {
+            alert("You can only request up to 5 writers at a time.");
+            return;
+        }
+
         setSelectedWriter(writer);
         setIsModalOpen(true);
     };
 
     const submitRequest = async () => {
-        if (!description.trim() || pages <= 0 || ratePerPage <= 0) {
+        if (!taskName.trim() || !description.trim() || pages <= 0 || ratePerPage <= 0 || !deadline) {
             alert("Please fill all fields correctly.");
             return;
         }
 
         const totalCost = pages * ratePerPage;
+        const deadlineTimestamp = new Date(deadline);
 
-        await addDoc(collection(firestore, "requests"), {
-            writerId: selectedWriter.id,
+        // ✅ Step 1: Create an Assignment in Available Work
+        const assignmentRef = await addDoc(collection(firestore, "assignments"), {
             userId: currentUser.uid,
+            title: taskName,
+            description,
+            pages,
+            ratePerPage,
+            totalPrice: totalCost,
+            deadline: deadlineTimestamp,
+            isFinished: false,
+            isAssigned: false,
+            status: "pending",
+            createdAt: new Date(),
+        });
+
+        const assignmentId = assignmentRef.id;
+
+        // ✅ Step 2: Create a Request for the Writer
+        const requestRef = await addDoc(collection(firestore, "requests"), {
+            writerId: selectedWriter.id,
+            writerName: selectedWriter.username,
+            userId: currentUser.uid,
+            userName: currentUser.displayName,
+            assignmentTitle: taskName,
             description,
             pages,
             ratePerPage,
             totalCost,
+            deadline: deadlineTimestamp,
             status: "pending",
-            timestamp: new Date()
+            timestamp: new Date(),
+            assignmentId, // Link to assignment
+            expiryTime: new Date(Date.now() + 48 * 60 * 60 * 1000) // 🔥 Expires in 48 hours
         });
 
+        // ✅ Step 3: Notify the Writer
         const notificationsRef = doc(firestore, "notifications", selectedWriter.id);
         const notificationsSnapshot = await getDoc(notificationsRef);
 
@@ -109,15 +143,19 @@ const Home = () => {
         await updateDoc(notificationsRef, {
             messages: arrayUnion({
                 recipientId: selectedWriter.id,
-                message: `User ${currentUser.displayName} has requested you for a task: '${description}', ${pages} pages at ₹${ratePerPage}/page. Will you accept?`,
+                message: `📝 User ${currentUser.displayName} has requested you for a task: '${taskName}', ${pages} pages at ₹${ratePerPage}/page. Accept within 48 hours!`,
+                assignmentId,
+                writerId: selectedWriter.id,
+                userId: currentUser.uid,
+                status: "pending",
                 timestamp: new Date(),
-                read: false
-            })
+                read: false,
+            }),
         });
 
         setIsModalOpen(false);
-        setUserRequest(true);
-        alert("Request Sent!");
+        alert("✅ Request Sent!");
+        setUserRequests(prev => [...prev, selectedWriter.id]);
     };
 
     return (
@@ -138,10 +176,8 @@ const Home = () => {
                                 className="w-12 h-12 rounded-full border-2 border-gray-300 mr-3"
                             />
                             <div>
-                                <p
-                                    className="text-blue-600 font-semibold cursor-pointer"
-                                    onClick={() => navigate(`/user/${writer.username}`)}
-                                >
+                                <p className="text-blue-600 font-semibold cursor-pointer"
+                                    onClick={() => navigate(`/user/${writer.username}`)}>
                                     {writer.username}
                                 </p>
                                 <p className="text-gray-500">{writer.writerProfile.tasksCompleted} tasks completed</p>
@@ -158,46 +194,29 @@ const Home = () => {
                 </ul>
             )}
 
-            {/* Request Writer Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                    <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+                    <div className="bg-white p-6 rounded-lg shadow-lg w-96 relative">
+                        <button
+                            onClick={() => setIsModalOpen(false)}
+                            className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full"
+                        >
+                            ✕
+                        </button>
                         <h2 className="text-xl font-bold mb-2">Request {selectedWriter.username}</h2>
-                        <label className="block mt-2">Description:</label>
-                        <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            className="w-full p-2 border rounded"
-                        />
-                        <label className="block mt-2">Number of Pages:</label>
-                        <input
-                            type="number"
-                            value={pages}
-                            onChange={(e) => setPages(Number(e.target.value))}
-                            className="w-full p-2 border rounded"
-                        />
-                        <label className="block mt-2">Rate Per Page (₹):</label>
-                        <input
-                            type="number"
-                            value={ratePerPage}
-                            onChange={(e) => setRatePerPage(Number(e.target.value))}
-                            className="w-full p-2 border rounded"
-                        />
-                        <p className="mt-2">Total Cost: ₹{pages * ratePerPage}</p>
-                        <div className="flex justify-between mt-4">
-                            <button
-                                onClick={() => setIsModalOpen(false)}
-                                className="bg-gray-500 text-white px-4 py-2 rounded"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={submitRequest}
-                                className="bg-green-500 text-white px-4 py-2 rounded"
-                            >
-                                Submit Request
-                            </button>
-                        </div>
+                        <label>Task Name:</label>
+                        <input type="text" value={taskName} onChange={(e) => setTaskName(e.target.value)} className="w-full p-2 border rounded" />
+                        <label>Description:</label>
+                        <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full p-2 border rounded" />
+                        <label>Number of Pages:</label>
+                        <input type="number" value={pages} onChange={(e) => setPages(Number(e.target.value))} className="w-full p-2 border rounded" />
+                        <label>Rate Per Page (₹):</label>
+                        <input type="number" value={ratePerPage} onChange={(e) => setRatePerPage(Number(e.target.value))} className="w-full p-2 border rounded" />
+                        <label>Deadline:</label>
+                        <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-full p-2 border rounded" />
+                        <button onClick={submitRequest} className="mt-4 bg-green-500 text-white px-4 py-2 rounded">
+                            Submit Request
+                        </button>
                     </div>
                 </div>
             )}

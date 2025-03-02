@@ -1,7 +1,17 @@
 import { useState, useEffect } from "react";
 import { firestore, auth } from "../firebase";
-import { 
-    collection, doc, getDoc, updateDoc, setDoc, arrayUnion, onSnapshot
+import {
+    collection,
+    query,
+    where,
+    getDocs, // 🔥 Make sure getDocs is imported!
+    getDoc,
+    updateDoc,
+    deleteDoc,
+    doc,
+    setDoc,
+    arrayUnion,
+    onSnapshot
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
@@ -34,74 +44,92 @@ const Notifications = () => {
     }, [currentUser]);
 
     // ✅ Accept Request: Assign Writer & Open Chat
-    const acceptRequest = async (request, index) => {
-        if (!currentUser) return;
+   // ✅ Accept Request: Assign Writer & Open Chat
+   const acceptRequest = async (request, index) => {
+    if (!currentUser) return;
 
-        try {
-            console.log("🔍 Accepting request:", request);
+    try {
+        console.log("🔍 Accepting request:", request);
 
-            const { assignmentId, writerId, writerName, userId } = request;
+        const { assignmentId, writerId, writerName, userId } = request;
 
-            if (!assignmentId || !writerId || !userId) {
-                console.error("🚨 Missing required fields in request object:", request);
-                return;
-            }
-
-            console.log("📌 Using Assignment ID:", assignmentId);
-
-            const chatId = `${assignmentId}-${writerId}`;
-            const chatRef = doc(firestore, "chats", chatId);
-
-            // ✅ Create a chat document
-            await setDoc(chatRef, {
-                assignmentId,
-                userId,
-                writerId,
-                messages: [],
-                createdAt: new Date(),
-            });
-
-            console.log(`✅ Chat created with ID: ${chatId}`);
-
-            // ✅ Update assignment as assigned
-            const assignmentRef = doc(firestore, "assignments", assignmentId);
-            await updateDoc(assignmentRef, {
-                isAssigned: true,
-                writerId: writerId,
-                status: "in progress",
-            });
-
-            console.log(`✅ Assignment updated as "in progress"`);
-
-            // ✅ Send notification to writer
-            const writerNotificationsRef = doc(firestore, "notifications", writerId);
-            const writerNotificationsSnapshot = await getDoc(writerNotificationsRef);
-
-            if (!writerNotificationsSnapshot.exists()) {
-                await setDoc(writerNotificationsRef, { messages: [] });
-                console.log("✅ Notifications document created for writer.");
-            }
-
-            await updateDoc(writerNotificationsRef, {
-                messages: arrayUnion({
-                    message: `✅ Your request to work on "${request.assignmentTitle}" has been accepted. Chat is now open!`,
-                    chatId: chatId,
-                    timestamp: new Date(),
-                    read: false,
-                }),
-            });
-
-            console.log(`✅ Notification sent to writer: ${writerId}`);
-
-            // ✅ Mark notification as read
-            markAsRead(index);
-
-            // Redirect to chat page
-            navigate(`/chat/${chatId}`);
-        } catch (error) {
-            console.error("🔥 Error accepting request:", error.message);
+        if (!assignmentId || !writerId || !userId) {
+            console.error("🚨 Missing required fields in request object:", request);
+            return;
         }
-    };
+
+        console.log("📌 Using Assignment ID:", assignmentId);
+
+        const chatId = `${assignmentId}-${writerId}`;
+        const chatRef = doc(firestore, "chats", chatId);
+
+        // ✅ Check if assignment already assigned to another writer
+        const assignmentRef = doc(firestore, "assignments", assignmentId);
+        const assignmentSnap = await getDoc(assignmentRef);
+
+        if (!assignmentSnap.exists()) {
+            console.error("🚨 Assignment not found!");
+            alert("This assignment no longer exists.");
+            return;
+        }
+
+        const assignmentData = assignmentSnap.data();
+        if (assignmentData.isAssigned) {
+            alert("This task has already been accepted by another writer.");
+            return;
+        }
+
+        // ✅ Assign writer & create chat
+        await updateDoc(assignmentRef, {
+            isAssigned: true,
+            writerId,
+            status: "in progress",
+        });
+
+        await setDoc(chatRef, {
+            assignmentId,
+            userId,
+            writerId,
+            messages: [],
+            createdAt: new Date(),
+        });
+
+        console.log(`✅ Chat created with ID: ${chatId}`);
+
+        // ✅ Notify writer and user
+        const userNotificationsRef = doc(firestore, "notifications", userId);
+        const writerNotificationsRef = doc(firestore, "notifications", writerId);
+
+        await updateDoc(userNotificationsRef, {
+            messages: arrayUnion({
+                message: `✅ Your task "${assignmentData.title}" has been assigned to ${writerName}.`,
+                chatId: chatId,
+                timestamp: new Date(),
+                read: false,
+            }),
+        });
+
+        await updateDoc(writerNotificationsRef, {
+            messages: arrayUnion({
+                message: `✅ You have been assigned the task "${assignmentData.title}".`,
+                chatId: chatId,
+                timestamp: new Date(),
+                read: false,
+            }),
+        });
+
+        // ✅ Mark notification as read
+        markAsRead(index);
+
+        // Redirect to chat page
+        navigate(`/chat/${chatId}`);
+    } catch (error) {
+        console.error("🔥 Error accepting request:", error.message);
+    }
+};
+
+
+
 
     // ❌ Reject Request: Remove the notification
     const rejectRequest = async (index) => {
@@ -118,6 +146,14 @@ const Notifications = () => {
         await updateDoc(notificationsRef, { messages: updatedMessages });
 
         console.log("✅ Notification removed");
+    };
+
+    // ✅ Open Chat and Remove Notification
+    const openChat = async (chatId, index) => {
+        if (!currentUser) return;
+
+        markAsRead(index);
+        navigate(`/chat/${chatId}`);
     };
 
     return (
@@ -137,8 +173,17 @@ const Notifications = () => {
                                 {new Date(n.timestamp.seconds * 1000).toLocaleString()}
                             </p>
 
-                            {/* Accept & Reject Buttons */}
-                            {!n.read && (
+                            {/* Show Accept/Reject Buttons only for request notifications */}
+                            {n.chatId ? (
+                                <div className="mt-2">
+                                    <button
+                                        onClick={() => openChat(n.chatId, index)}
+                                        className="bg-green-500 text-white px-4 py-2 rounded-md"
+                                    >
+                                        Open Chat
+                                    </button>
+                                </div>
+                            ) : (
                                 <div className="mt-2 flex space-x-4">
                                     <button
                                         onClick={() => acceptRequest(n, index)}
